@@ -1,6 +1,6 @@
 # Outlook Desktop
 
-Outlook Desktop is a simple  Outlook Web (Office 365) Desktop application, built using [ElectronJS](https://www.electronjs.org).
+Outlook Desktop is a simple Outlook Web (Office 365) Desktop application, built using [ElectronJS](https://www.electronjs.org).
 
 ## Features
 
@@ -51,3 +51,7 @@ npm run make
 ## Errata
 
 Logo borrowed from [Seeklogo](https://seeklogo.com/vector-logo/266581/outlook)
+
+### Changes
+
+After building - create a symlink to /usr/bin to be used across the system
