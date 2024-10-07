@@ -48,12 +48,28 @@ function createWindow(email) {
   // Load the Outlook URL with the email parameter
   window.loadURL(`https://outlook.office.com/?email=${email}`);
 
-  // Open links with External Browser
-  // https://stackoverflow.com/a/67409223
-  // window.webContents.setWindowOpenHandler(({ url }) => {
-  //   shell.openExternal(url);
-  //   return { action: "deny" };
-  // });
+  // Debug logging
+  window.webContents.on('will-navigate', (event, url) => {
+    console.log('will-navigate:', url);
+  });
+
+  window.webContents.on('did-navigate', (event, url) => {
+    console.log('did-navigate:', url);
+  });
+
+  window.webContents.on('new-window', (event, url) => {
+    console.log('new-window:', url);
+    event.preventDefault();
+    shell.openExternal(url);
+  });
+
+  // Attempt to intercept and handle link clicks
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('https://outlook.office.com')) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     // Check if the URL belongs to Outlook
@@ -77,12 +93,25 @@ function createWindow(email) {
         },
       });
       newWindow.loadURL(url);
-      // return { action: "deny" };
+      return { action: "deny" };
     } else {
       // Open the URL in the external browser
       shell.openExternal(url);
       return { action: "deny" };
     }
+  });
+
+  // Inject custom JavaScript to modify link behavior
+  window.webContents.on('dom-ready', () => {
+    window.webContents.executeJavaScript(`
+      document.addEventListener('click', (event) => {
+        if (event.target.tagName === 'A' && !event.target.href.startsWith('https://outlook.office.com')) {
+          event.preventDefault();
+          event.stopPropagation();
+          window.open(event.target.href, '_blank');
+        }
+      }, true);
+    `);
   });
 
   window.webContents.on("context-menu", (event, params) => {
