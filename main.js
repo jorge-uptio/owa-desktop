@@ -40,6 +40,9 @@ function createWindow(email) {
       nodeIntegration: true,
       nativeWindowOpen: true,
       session: ses,
+      webviewTag: true,
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
 
@@ -65,7 +68,8 @@ function createWindow(email) {
 
   // Attempt to intercept and handle link clicks
   window.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('https://outlook.office.com')) {
+    const isOutlookUrl = url.includes("outlook.office.com") || url.includes("login.microsoftonline.com");
+    if (!isOutlookUrl) {
       event.preventDefault();
       shell.openExternal(url);
     }
@@ -73,7 +77,7 @@ function createWindow(email) {
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     // Check if the URL belongs to Outlook
-    const isOutlookUrl = url.includes("outlook.office.com");
+    const isOutlookUrl = url.includes("outlook.office.com") || url.includes("login.microsoftonline.com");
 
     if (isOutlookUrl) {
       // Open the URL in a new window
@@ -90,6 +94,9 @@ function createWindow(email) {
           nodeIntegration: true,
           nativeWindowOpen: true,
           session: ses,
+          webviewTag: true,
+          nodeIntegration: false,
+          contextIsolation: true,
         },
       });
       newWindow.loadURL(url);
