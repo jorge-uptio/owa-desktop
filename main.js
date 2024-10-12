@@ -32,6 +32,8 @@ function createWindow(email) {
     title: `Outlook Desktop - ${email}`,
     icon: __dirname + "images/Outlook.ico",
     autoHideMenuBar: true,
+    // titleBarStyle: 'hidden',
+    frame: false,
     webPreferences: {
       spellcheck: true,
       webSecurity: true,
@@ -86,6 +88,8 @@ function createWindow(email) {
         height: 600,
         autoHideMenuBar: true,
         title: `Outlook New Window`,
+        // titleBarStyle: 'hidden',
+        frame: false,
         webPreferences: {
           spellcheck: true,
           webSecurity: true,
