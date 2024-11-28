@@ -10,8 +10,10 @@ const {
   Menu,
   MenuItem,
   session,
+  dialog,
 } = require("electron");
 const { getSessionData, setSessionData } = require("./settings.js");
+const path = require('path');
 
 let windows = {}; // Store BrowserWindow instances by email
 
@@ -49,6 +51,79 @@ function createWindow(email) {
   });
 
   windows[email] = window;
+
+  // Add this event listener for the session
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    if (details.url.includes('attachment.outlook')) {
+      // Get the original filename from the Content-Disposition header
+      const disposition = details.responseHeaders['content-disposition']?.[0] || 
+                         details.responseHeaders['Content-Disposition']?.[0];
+      
+      if (disposition) {
+        // Extract filename from Content-Disposition
+        const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+        const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : null;
+        
+        if (filename) {
+          // Modify the Content-Disposition header to force download with correct filename
+          details.responseHeaders['content-disposition'] = [`attachment; filename="${filename}"`];
+        }
+      }
+    }
+    callback({ responseHeaders: details.responseHeaders });
+  });
+
+  // Modify window open handler to handle attachments
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.includes('attachment.outlook')) {
+      // Let the download happen in the main window
+      window.webContents.loadURL(url);
+      return { action: 'deny' };
+    }
+    // Handle other URLs as before
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  // Add download handler
+  ses.on('will-download', (event, item, webContents) => {
+    const filename = item.getFilename();
+    const downloadPath = app.getPath('downloads');
+
+    // Show save dialog with the correct filename
+    dialog.showSaveDialog({
+      defaultPath: path.join(downloadPath, filename),
+      properties: ['createDirectory'],
+      filters: [
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    }).then(({ filePath }) => {
+      if (filePath) {
+        item.setSavePath(filePath);
+      } else {
+        item.cancel();
+      }
+    });
+
+    // Monitor download progress
+    item.on('updated', (event, state) => {
+      if (state === 'interrupted') {
+        console.log('Download interrupted');
+      } else if (state === 'progressing') {
+        if (item.isPaused()) {
+          console.log('Download paused');
+        }
+      }
+    });
+
+    item.on('done', (event, state) => {
+      if (state === 'completed') {
+        console.log('Download completed');
+      } else {
+        console.log(`Download failed: ${state}`);
+      }
+    });
+  });
 
   // Load the Outlook URL with the email parameter
   window.loadURL(`https://outlook.office.com/?email=${email}`);
@@ -152,10 +227,6 @@ function createWindow(email) {
     }
 
     menu.popup();
-  });
-
-  window.webContents.session.on("will-download", (event, item, webContents) => {
-    // Handle downloads or other session-related events
   });
 
   // Save session data when the window is closed
