@@ -37,7 +37,7 @@ npm run test
 To build the application installer.
 
 ```powershell
-npm run make
+npm run package
 ```
 
 ## Dependencies
