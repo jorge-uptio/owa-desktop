@@ -16,6 +16,7 @@ function createWindow(email) {
     width: 1280,
     height: 720,
     autoHideMenuBar: true,
+    frame: false,
     webPreferences: {
       spellcheck: true,
       webSecurity: true,
