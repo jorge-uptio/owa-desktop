@@ -37,8 +37,5 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.2.0",
     "@electron-forge/publisher-github": "^7.2.0",
     "electron": "^28.1.0"
-  },
-  "dependencies": {
-    "electron-store": "^8.1.0"
   }
 }
