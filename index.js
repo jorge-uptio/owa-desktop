@@ -2,7 +2,12 @@ const { app, shell, BrowserWindow, session, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-// Linux-specific optimizations
+// Wayland-specific optimizations
+app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer,WaylandWindowDecorations');
+app.commandLine.appendSwitch('ozone-platform', 'wayland');
+app.commandLine.appendSwitch('enable-wayland-ime');
+
+// General Linux optimizations
 app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -18,13 +23,13 @@ function createWindow(email) {
   const partition = `persist:${email}`;
   const ses = session.fromPartition(partition);
 
-  // Linux-specific window configuration
+  // Wayland-optimized window configuration
   const window = new BrowserWindow({
     width: 1280,
     height: 720,
     autoHideMenuBar: true,
     frame: false,
-    show: false, // Don't show until ready
+    show: false,
     backgroundColor: '#FFFFFF',
     webPreferences: {
       spellcheck: true,
@@ -34,84 +39,76 @@ function createWindow(email) {
       nodeIntegration: true,
       nativeWindowOpen: true,
       session: ses,
-      // Enable better handling of async operations
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      // Wayland-specific preferences
+      enablePreferredSizeMode: true
     }
   });
 
-  // Debug async operations
+  // Prevent white flashes during loading
   window.webContents.on('did-start-loading', () => {
     console.log(`[${email}] Started loading`);
   });
 
   window.webContents.on('did-finish-load', () => {
     console.log(`[${email}] Finished loading`);
-    window.show();
+    // Small delay before showing to ensure content is rendered
+    setTimeout(() => window.show(), 100);
   });
 
-  // Monitor for hung renderer process
+  // Add performance monitoring
+  window.webContents.on('did-frame-finish-load', () => {
+    window.webContents.executeJavaScript(`
+      window.performance.mark('windowLoaded');
+      window.performance.measure('loadTime', 'navigationStart', 'windowLoaded');
+      console.log('Window load time:', window.performance.getEntriesByName('loadTime')[0].duration);
+    `);
+  });
+
+  // Monitor for main process hang
   let lastResponseTime = Date.now();
   const pingInterval = setInterval(() => {
     if (window.webContents) {
-      window.webContents.executeJavaScript('console.log("ping")')
+      window.webContents.executeJavaScript(`
+        // Check if Outlook is responsive
+        if (typeof OWA !== 'undefined' && OWA.enabled) {
+          console.log('OWA active and responsive');
+        }
+      `)
         .then(() => {
           lastResponseTime = Date.now();
         })
         .catch(err => {
           const timeSinceLastResponse = Date.now() - lastResponseTime;
-          if (timeSinceLastResponse > 5000) { // 5 seconds
-            console.log(`[${email}] Renderer appears hung, attempting recovery`);
+          if (timeSinceLastResponse > 5000) {
+            console.log(`[${email}] Process appears hung, attempting recovery`);
             window.webContents.reload();
           }
         });
     }
-  }, 1000);
+  }, 2000);
 
-  // Monitor Outlook's WebSocket connection
-  window.webContents.on('did-navigate', () => {
-    window.webContents.executeJavaScript(`
-      (function() {
-        let wsConnections = 0;
-        const origWS = window.WebSocket;
-        window.WebSocket = function(url, protocols) {
-          const ws = new origWS(url, protocols);
-          wsConnections++;
-          console.log('WebSocket opened, total:', wsConnections);
-          
-          ws.addEventListener('close', () => {
-            wsConnections--;
-            console.log('WebSocket closed, total:', wsConnections);
-            if (wsConnections === 0) {
-              // Attempt to reconnect if all connections are lost
-              setTimeout(() => window.location.reload(), 1000);
-            }
-          });
-          
-          return ws;
-        };
-      })()
-    `);
-  });
-
-  // Handle renderer crashes more gracefully
-  window.webContents.on('crashed', (event, killed) => {
-    console.log(`[${email}] Renderer crashed, killed: ${killed}`);
+  // Enhanced error handling for Wayland
+  window.webContents.on('render-process-gone', (event, details) => {
+    console.log(`[${email}] Render process gone:`, details.reason);
     clearInterval(pingInterval);
     
-    const options = {
-      type: 'error',
-      title: 'Process Crashed',
-      message: 'The window crashed. Do you want to reload?',
-      buttons: ['Reload', 'Close']
-    };
-    
-    require('electron').dialog.showMessageBox(window, options).then(result => {
-      if (result.response === 0) {
-        window.reload();
-      } else {
-        window.close();
-      }
-    });
+    if (details.reason !== 'clean-exit') {
+      const options = {
+        type: 'error',
+        title: 'Process Terminated',
+        message: `The window process was terminated (${details.reason}). Reload?`,
+        buttons: ['Reload', 'Close']
+      };
+      
+      require('electron').dialog.showMessageBox(window, options).then(result => {
+        if (result.response === 0) {
+          window.reload();
+        } else {
+          window.close();
+        }
+      });
+    }
   });
 
   window.loadURL(`https://outlook.office.com/?email=${email}`);
