@@ -1,6 +1,4 @@
-const { app, shell, BrowserWindow, session, ipcMain } = require('electron');
-const fs = require('fs');
-const path = require('path');
+const { app, BrowserWindow, session } = require('electron');
 
 // Wayland-specific optimizations
 app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer,WaylandWindowDecorations');
@@ -23,6 +21,24 @@ function createWindow(email) {
   const partition = `persist:${email}`;
   const ses = session.fromPartition(partition);
 
+  const webPreferences = {
+    spellcheck: true,
+    webSecurity: true,
+    contextIsolation: true,  // Changed to true for security
+    webviewTag: true,
+    nodeIntegration: false,  // Changed to false for security
+    nativeWindowOpen: true,
+    session: ses,
+    backgroundThrottling: false,
+    enablePreferredSizeMode: true,
+    // Added security options
+    sandbox: true,
+    // Enable only necessary permissions
+    enableWebSQL: false,
+    allowRunningInsecureContent: false,
+    experimentalFeatures: false
+  };
+
   // Wayland-optimized window configuration
   const window = new BrowserWindow({
     width: 1280,
@@ -31,18 +47,7 @@ function createWindow(email) {
     frame: false,
     show: false,
     backgroundColor: '#FFFFFF',
-    webPreferences: {
-      spellcheck: true,
-      webSecurity: true,
-      contextIsolation: false,
-      webviewTag: true,
-      nodeIntegration: true,
-      nativeWindowOpen: true,
-      session: ses,
-      backgroundThrottling: false,
-      // Wayland-specific preferences
-      enablePreferredSizeMode: true
-    }
+    webPreferences
   });
 
   // Prevent white flashes during loading
@@ -54,15 +59,6 @@ function createWindow(email) {
     console.log(`[${email}] Finished loading`);
     // Small delay before showing to ensure content is rendered
     setTimeout(() => window.show(), 100);
-  });
-
-  // Add performance monitoring
-  window.webContents.on('did-frame-finish-load', () => {
-    window.webContents.executeJavaScript(`
-      window.performance.mark('windowLoaded');
-      window.performance.measure('loadTime', 'navigationStart', 'windowLoaded');
-      console.log('Window load time:', window.performance.getEntriesByName('loadTime')[0].duration);
-    `);
   });
 
   // Monitor for main process hang
