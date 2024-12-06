@@ -24,9 +24,9 @@ function createWindow(email) {
   const webPreferences = {
     spellcheck: true,
     webSecurity: true,
-    contextIsolation: true,  // Changed to true for security
+    contextIsolation: false,
     webviewTag: true,
-    nodeIntegration: false,  // Changed to false for security
+    nodeIntegration: true,
     nativeWindowOpen: true,
     session: ses,
     backgroundThrottling: false,
@@ -48,6 +48,18 @@ function createWindow(email) {
     show: false,
     backgroundColor: '#FFFFFF',
     webPreferences
+  });
+
+  // Handle external links
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    // If it's an Outlook URL, create new window
+    if (url.includes('outlook.office.com') || url.includes('login.microsoftonline.com')) {
+      createWindow(email);
+      return { action: 'deny' };
+    }
+    // For all other URLs, open in default browser
+    shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   // Prevent white flashes during loading
@@ -84,38 +96,69 @@ function createWindow(email) {
     }
   }, 2000);
 
-  // Enhanced error handling for Wayland
+  // Mute all audio to prevent notification sounds from causing crashes
+  window.webContents.setAudioMuted(true);
+
+  // Enhanced error handling and cleanup
   window.webContents.on('render-process-gone', (event, details) => {
-    console.log(`[${email}] Render process gone:`, details.reason);
+    console.log(`[${email}] Render process gone: ${details.reason}`);
     clearInterval(pingInterval);
-    
-    if (details.reason !== 'clean-exit') {
-      const options = {
-        type: 'error',
-        title: 'Process Terminated',
-        message: `The window process was terminated (${details.reason}). Reload?`,
-        buttons: ['Reload', 'Close']
-      };
-      
-      require('electron').dialog.showMessageBox(window, options).then(result => {
-        if (result.response === 0) {
+
+    // Give the process a moment to clean up
+    setTimeout(() => {
+      try {
+        if (!window.isDestroyed()) {
           window.reload();
-        } else {
-          window.close();
         }
-      });
-    }
+      } catch (e) {
+        console.error('Error during reload:', e);
+      }
+    }, 1000);
   });
 
-  window.loadURL(`https://outlook.office.com/?email=${email}`);
+  // Add crashed event handler
+  window.webContents.on('crashed', (event, killed) => {
+    console.log(`[${email}] Renderer crashed: ${killed ? 'killed' : 'crashed'}`);
+    clearInterval(pingInterval);
+
+    setTimeout(() => {
+      try {
+        if (!window.isDestroyed()) {
+          window.reload();
+        }
+      } catch (e) {
+        console.error('Error during reload:', e);
+      }
+    }, 1000);
+  });
+
+  // Add unresponsive handler
+  window.on('unresponsive', () => {
+    console.log(`[${email}] Window became unresponsive`);
+    setTimeout(() => {
+      try {
+        if (!window.isDestroyed()) {
+          window.reload();
+        }
+      } catch (e) {
+        console.error('Error during reload:', e);
+      }
+    }, 1000);
+  });
 
   window.on('closed', () => {
     clearInterval(pingInterval);
     windows.delete(email);
   });
 
+  window.loadURL(`https://outlook.office.com/?email=${email}`);
+
   return window;
 }
+
+app.on('render-process-gone', (event, webContents, details) => {
+  console.error('Renderer process crashed:', details.reason);
+});
 
 app.whenReady().then(() => {
   const email = process.argv.find(arg => arg.startsWith('--email='))?.split('=')[1] 
