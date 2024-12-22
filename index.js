@@ -1,4 +1,5 @@
 const { app, shell, BrowserWindow, session } = require('electron');
+const { Menu, MenuItem } = require('electron');
 
 // Wayland-specific optimizations
 app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer,WaylandWindowDecorations,VaapiVideoDecoder');
@@ -57,6 +58,37 @@ function createWindow(email) {
     // For all other URLs, open in default browser
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // Add context menu
+  window.webContents.on('context-menu', (event, params) => {
+    const menu = new Menu();
+
+    // Add copy/paste actions when text is selected
+    if (params.selectionText) {
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+    }
+
+    // Always show these items
+    menu.append(new MenuItem({ label: 'Paste', role: 'paste' }));
+    menu.append(new MenuItem({ label: 'Cut', role: 'cut' }));
+    menu.append(new MenuItem({ type: 'separator' }));
+    menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+
+    // Add spelling suggestions if available
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions) {
+        menu.append(new MenuItem({
+          label: suggestion,
+          click: () => window.webContents.replaceMisspelling(suggestion)
+        }));
+      }
+      menu.append(new MenuItem({ type: 'separator' }));
+    }
+
+    // Show context menu
+    menu.popup();
   });
 
   window.on('closed', () => {
